@@ -7,9 +7,25 @@ carga PostgreSQL de forma reintentable y produce informes batch y alertas de
 streaming. Los archivos fuente se excluyen del repositorio porque contienen
 datos personales y confidenciales; los datos fuente no se modifican.
 
-> **Datos de prueba:** los CSV de clientes contienen datos personales. No copies
-> esos datos a logs, capturas, tickets ni servicios externos. La carpeta `.venv`
-> y el `.env` local no deben ir en el ZIP de entrega.
+> **Datos fuente:** no están incluidos en este repositorio porque pueden
+> contener información personal o confidencial. No copies datos sensibles a
+> Git, logs, capturas, tickets ni servicios externos.
+
+## Clonar el repositorio
+
+Requisitos previos: Git, Python 3.10 o posterior y Docker Desktop con Docker
+Compose v2. GNU Make es necesario para los comandos `make`; Terraform 1.5+ es
+opcional y solo se usa para validar la infraestructura.
+
+```bash
+git clone https://github.com/HUETIO/PRUEBA-TECNICA.git
+cd PRUEBA-TECNICA
+```
+
+Los archivos de origen se excluyen deliberadamente. Si tienes autorización
+para usarlos, colócalos localmente en `data/consumos/`, `data/eventos/`,
+`data/facturacion/` y `data/maestros/`, según corresponda. Esa carpeta está
+ignorada por Git y no se subirá al repositorio.
 
 ## 1. Qué requisitos cubre
 
@@ -22,21 +38,6 @@ datos personales y confidenciales; los datos fuente no se modifican.
 | D · Streaming | Publica el NDJSON con `tools/producer.py`, drena el tópico y emite una sola alerta por secuencia de tres o más intervalos ausentes. | `make stream`, `out/alertas.json` |
 | E · Operación | Logs JSON sin contenido de filas, métricas por corrida e instrucciones de recuperación. | `logs/pipeline.log`, `out/metrics.json`, `RUNBOOK.md` |
 | F · IaC | Bucket S3 versionado/cifrado con KMS, política de transporte, roles IAM acotados y logs. No se despliega. | `cd infra; terraform validate` |
-
-### Perfil observado en la ejecución local analizada
-
-El análisis local de los archivos encontró cinco CSV de consumo con **115.340
-filas** en total; enero y abril usan coma, febrero usa `;`, decimal con coma y
-timestamp UTC, marzo añade la columna `unidad`, y el maestro de clientes se
-lee en Windows-1252. Se normalizaron 400 lecturas MWh. En los datos analizados
-se detectaron 180 filas duplicadas exactas, 420 conflictivas, 300 correcciones
-de abril, 60 valores vacíos, 90 negativos, 45 outliers, 655 horas sin lectura
-válida, 12 facturas huérfanas y 25 clientes con PII en `observaciones`.
-
-El stream incluye 3.795 eventos. La lógica de alertas sobre esos eventos emite
-22 alertas de consumo fuera de banda, 6 de frontera sin reporte y 5 lecturas
-retroactivas. Son resultados de la implementación actual sobre estos archivos,
-no valores codificados en el pipeline.
 
 ## 2. Requisitos locales y entorno aislado
 
@@ -175,17 +176,6 @@ La API ofrece estos endpoints:
 | `GET /api/metricas` | `out/metrics.json`. |
 | `GET /api/alertas?limit=100` | `out/alertas.json`, limitado a 1.000 resultados. |
 
-### Cómo presentarlo al usuario
-
-> “Este tablero Flet consume una API local desplegada con Docker Compose. La
-> API consulta solo la vista analítica de PostgreSQL con el rol de analista,
-> por lo que el tablero no expone datos personales ni tiene permisos de
-> escritura. Puedo filtrar consumo por mes y frontera y revisar indicadores de
-> calidad y alertas generadas por el pipeline. Para ver datos recientes,
-> primero ejecuto la ingesta y el proceso de streaming. Los puertos quedan
-> ligados a localhost; esta es una demostración local, no una publicación para
-> usuarios remotos ni una arquitectura de alta disponibilidad.”
-
 ## 4. Batch, reglas de datos y modelo
 
 ### Normalización y precedencia
@@ -266,10 +256,9 @@ descifrado en PostgreSQL. Auditoría solo permite `SELECT` sobre la bitácora.
 
 Las contraseñas evaluables se generan al ejecutar `make up` y se copian a
 `entrega.yaml` porque el verificador necesita conectarse. Son solo para esta
-instalación local; no reutilizarlas. `entrega.yaml` requiere completar nombre y
-correo reales del candidato antes de entregar. La configuración heredada no
-confiable fue retirada de `config/pipeline.yaml` y Docker Compose; no se usa el
-servicio MinIO en este diseño.
+instalación local; no reutilizarlas. La configuración heredada no confiable fue
+retirada de `config/pipeline.yaml` y Docker Compose; no se usa el servicio
+MinIO en este diseño.
 
 ## 6. Streaming
 
@@ -293,8 +282,8 @@ estable. El JSON contiene exclusivamente `tipo`, `frontera_id` y `ts`.
 La suite cubre normalización UTC, decimales/unidades, duplicados y correcciones,
 rechazos/huecos, parseo de CSV hostil (Windows-1252, comillas, multilinea y
 campos grandes), rechazo de CSV truncado, cifrado/enmascaramiento y las tres
-reglas de alertas. También perfila todas las lecturas del paquete para detectar
-regresiones en el formato de origen.
+reglas de alertas. Cuando los datos fuente locales están disponibles, se
+ejecutan pruebas de perfil para detectar regresiones en su formato.
 
 ```bash
 make test
@@ -314,49 +303,12 @@ No ejecutar `terraform apply`: el diseño cloud es solo artefacto de lectura.
 ## 8. Arquitectura y riesgos aceptados
 
 La solución es un pipeline Python acotado y Postgres local, no Spark/Airflow:
-el conjunto ronda 115 mil filas, cabe holgadamente en un proceso local y no
+el volumen previsto para esta prueba cabe holgadamente en un proceso local y no
 justifica costos/operación distribuida. La ingesta en una transacción reduce
 complejidad de recuperación y evita que un archivo inválido deje una carga
-parcial. La evidencia de decisiones y trade-offs está en `DECISIONS.md`.
+parcial. La evidencia de decisiones técnicas está en `DECISIONS.md`.
 
 Riesgos locales deliberados: la llave AES está en el mismo host que el
 contenedor PostgreSQL, no hay rotación de llaves ni catálogo externo de secretos,
 y el entorno Compose no es alta disponibilidad. `THREAT_MODEL.md` describe
 controles y brechas sin presentarlas como seguridad de producción.
-
-## 9. Cómo explicar tus decisiones con claridad
-
-Para preguntas técnicas usa este orden, en 60–120 segundos:
-
-1. **Contexto:** qué dato/requisito real estaba en riesgo.
-2. **Evidencia:** archivo, conteo, prueba o salida que observaste (no una
-   suposición).
-3. **Decisión:** qué implementaste y dónde.
-4. **Trade-off:** alternativa que descartaste y qué costo aceptaste.
-5. **Verificación:** comando y resultado que demuestra el comportamiento.
-6. **Límite:** qué falta para producción y cómo lo cerrarías.
-
-Para una experiencia conductual, usa **STAR** (Situación, Tarea, Acción,
-Resultado) y añade una frase de aprendizaje. Habla en primera persona sobre lo
-que realmente hiciste; diferencia implementación, pruebas ejecutadas y pruebas
-pendientes. Si una cifra o decisión no la recuerdas, dilo y explica cómo la
-comprobarías. Una respuesta clara puede seguir esta plantilla:
-
-> “El requisito era __. Verifiqué __ y encontré __. Elegí __ en
-> `archivo/componente` porque __; descarté __ por __. Lo comprobé con
-> `comando`, que produjo __. Acepté __ como limitación; para producción haría
-> __.”
-
-No presentes como evidencia un target que no se pudo ejecutar ni prometas que
-un control es absoluto. La tabla de decisiones, DQ real y pruebas de
-`tests/test_pipeline.py` dan ejemplos concretos para defender la solución.
-
-## 10. Checklist de entrega
-
-- [ ] Completar `candidato.nombre_completo` y `candidato.email` en `entrega.yaml`.
-- [ ] Ejecutar desde cero: `make setup up run run stream test verificar down`.
-- [ ] Revisar que el manifiesto conecte con las credenciales de `.env`.
-- [ ] No comprimir `.venv/`, `.env`, volúmenes Docker ni `data/`.
-- [ ] Incluir `infra/`, scripts, SQL, pruebas y documentación en la raíz.
-- [ ] Si se entrega historial Git, incluir el historial existente sin añadir datos
-  personales del dataset ni secretos.
