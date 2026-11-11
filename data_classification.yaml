@@ -1,0 +1,64 @@
+version: 1
+model:
+  core.dim_cliente:
+    cliente_id: Interno
+    razon_social: Restringido-PII
+    nit: Restringido-PII
+    email_contacto: Restringido-PII
+    celular_contacto: Restringido-PII
+    direccion: Restringido-PII
+    ciudad: Interno
+    departamento: Interno
+    representante_legal: Restringido-PII
+    observaciones: Restringido-PII
+  core.dim_frontera:
+    frontera_id: Confidencial
+    codigo_sic: Confidencial
+    cliente_id: Interno
+    mercado: Interno
+    operador_red: Interno
+    nivel_tension: Interno
+    fecha_registro: Interno
+    estado: Interno
+    min_kwh: Interno
+    max_kwh: Interno
+  core.fact_consumo_horario:
+    frontera_id: Confidencial
+    ts_local: Interno
+    consumo_kwh: Interno
+    version_lectura: Interno
+    calidad_lectura: Interno
+    source_file: Interno
+    source_row: Interno
+  core.facturacion:
+    factura_id: Confidencial
+    frontera_id: Confidencial
+    periodo: Interno
+    consumo_facturado_kwh: Interno
+    tarifa_cop_kwh: Interno
+    valor_total_cop: Interno
+    source_file: Interno
+  core.cuarentena:
+    source_file: Interno
+    record_key: Confidencial
+    reason: Interno
+    payload_sha256: Interno
+    first_seen_at: Interno
+  core.audit_log:
+    run_id: Interno
+    actor: Interno
+    started_at: Interno
+    finished_at: Interno
+    rows_read: Interno
+    rows_loaded: Interno
+    rows_rejected: Interno
+    result: Interno
+    details: Interno
+  analytics.vw_consumo_mensual:
+    frontera_id: Confidencial
+    mes: Interno
+    consumo_kwh: Interno
+    horas_con_dato: Interno
+    mercado: Interno
+    operador_red: Interno
+    estado: Interno

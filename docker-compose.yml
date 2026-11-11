@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# Infraestructura local de la prueba tecnica.
+#
+# Procede de un PoC interno y NO ha pasado revision de seguridad.
+# Auditarlo y endurecerlo hace parte del alcance de la prueba.
+#
+# Podes modificar este archivo libremente (de hecho, se espera que lo hagas).
+# Lo unico que NO podes cambiar son los nombres de los targets del Makefile.
+# ---------------------------------------------------------------------------
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bia_pg
+    environment:
+      POSTGRES_USER: ${PG_SUPERUSER:?Run make up to generate local credentials}
+      POSTGRES_PASSWORD: ${PG_SUPERPASSWORD:?Run make up to generate local credentials}
+      POSTGRES_DB: ${PG_DATABASE:-bia_datos}
+    ports:
+      - "127.0.0.1:${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.15
+    container_name: bia_redpanda
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 512M
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://127.0.0.1:9092
+    ports:
+      - "127.0.0.1:9092:9092"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bia_api
+    command: ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_DATABASE: ${PG_DATABASE:-bia_datos}
+      PG_ANALYST_USER: ${PG_ANALYST_USER:-rol_analista}
+      PG_ANALYST_PASSWORD: ${PG_ANALYST_PASSWORD:?Run make up to generate local credentials}
+      OUT_DIR: /app/out
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - ./out:/app/out:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -1,0 +1,16 @@
+# Configuracion funcional del pipeline batch local.
+pipeline:
+  nombre: ingesta_consumos
+  batch_size: 5000
+  reintentos: 3
+
+origen:
+  tipo: filesystem
+  ruta: data
+
+destino:
+  tipo: postgres
+  host: ${PG_HOST}
+  port: ${PG_PORT}
+  database: ${PG_DATABASE}
+  user: ${PG_INGEST_USER}
